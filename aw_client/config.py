@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 default_config = """
 [server]
+protocol = "http"
 hostname = "127.0.0.1"
 port = "5600"
 
@@ -16,6 +17,7 @@ port = "5600"
 commit_interval = 10
 
 [server-testing]
+protocol = "http"
 hostname = "127.0.0.1"
 port = "5666"
 

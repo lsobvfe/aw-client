@@ -65,7 +65,7 @@ class ActivityWatchClient:
         testing=False,
         host=None,
         port=None,
-        protocol="http",
+        protocol=None,
     ) -> None:
         """
         A handy wrapper around the aw-server REST API. The recommended way of interacting with the server.
@@ -88,8 +88,9 @@ class ActivityWatchClient:
 
         server_host = host or server_config["hostname"]
         server_port = port or server_config["port"]
+        server_protocol = protocol or server_config["protocol"]
         self.server_api_key = load_server_api_key(str(server_host), server_port)
-        self.server_address = f"{protocol}://{server_host}:{server_port}"
+        self.server_address = f"{server_protocol}://{server_host}:{server_port}"
 
         self.instance = SingleInstance(
             f"{self.client_name}-at-{server_host}-on-{server_port}"

@@ -89,6 +89,27 @@ def test_client_sends_desktop_authorization_header(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer secret123"
 
 
+def test_client_uses_configured_server_protocol(monkeypatch):
+    monkeypatch.setattr(
+        client_module,
+        "load_config",
+        lambda: {
+            "server": {
+                "protocol": "https",
+                "hostname": "aw.example.com",
+                "port": "443",
+            },
+            "client": {"commit_interval": 10},
+        },
+    )
+    monkeypatch.setattr(client_module, "load_server_api_key", lambda _host, _port: None)
+    monkeypatch.setattr(client_module, "SingleInstance", lambda name: object())
+
+    client = ActivityWatchClient("test-client")
+
+    assert client.server_address == "https://aw.example.com:443"
+
+
 def test_missing_desktop_session_has_no_parallel_auth_path(monkeypatch):
     monkeypatch.setattr(
         "aw_client.desktop_session.keyring.get_password",
