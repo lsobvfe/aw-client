@@ -39,6 +39,7 @@ def test_desktop_session_store_is_the_single_credential_contract(monkeypatch):
             "access_token": "access-token",
             "refresh_token": "refresh-token",
             "access_expires_at": "2026-07-11T12:00:00+00:00",
+            "refresh_expires_at": "2026-08-11T12:00:00+00:00",
         }
     )
 
@@ -49,6 +50,7 @@ def test_desktop_session_store_is_the_single_credential_contract(monkeypatch):
         "access_token": "access-token",
         "refresh_token": "refresh-token",
         "access_expires_at": "2026-07-11T12:00:00+00:00",
+        "refresh_expires_at": "2026-08-11T12:00:00+00:00",
     }
     assert store.load() == session
 
@@ -68,7 +70,8 @@ def test_client_sends_desktop_authorization_header(monkeypatch):
         "aw_client.desktop_session.keyring.get_password",
         lambda _service, _target: (
             '{"access_token":"secret123","refresh_token":"refresh123",'
-            '"access_expires_at":"2026-07-11T12:00:00+00:00"}'
+            '"access_expires_at":"2026-07-11T12:00:00+00:00",'
+            '"refresh_expires_at":"2026-08-11T12:00:00+00:00"}'
         ),
     )
     monkeypatch.setattr(client_module, "SingleInstance", lambda name: object())

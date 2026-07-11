@@ -18,6 +18,7 @@ class DesktopSession:
     access_token: str
     refresh_token: str
     access_expires_at: datetime
+    refresh_expires_at: datetime
 
 
 class DesktopSessionStore:
@@ -59,6 +60,7 @@ class DesktopSessionStore:
                     "access_token": session.access_token,
                     "refresh_token": session.refresh_token,
                     "access_expires_at": session.access_expires_at.isoformat(),
+                    "refresh_expires_at": session.refresh_expires_at.isoformat(),
                 },
                 separators=(",", ":"),
             ),
@@ -76,18 +78,28 @@ def _parse_session(payload: dict) -> DesktopSession:
     access_token = str(payload.get("access_token") or "").strip()
     refresh_token = str(payload.get("refresh_token") or "").strip()
     access_expires_at_raw = str(payload.get("access_expires_at") or "").strip()
-    if not access_token or not refresh_token or not access_expires_at_raw:
+    refresh_expires_at_raw = str(payload.get("refresh_expires_at") or "").strip()
+    if (
+        not access_token
+        or not refresh_token
+        or not access_expires_at_raw
+        or not refresh_expires_at_raw
+    ):
         raise RuntimeError("stored desktop session is incomplete")
     try:
         access_expires_at = datetime.fromisoformat(
             access_expires_at_raw.replace("Z", "+00:00")
         )
+        refresh_expires_at = datetime.fromisoformat(
+            refresh_expires_at_raw.replace("Z", "+00:00")
+        )
     except ValueError as exc:
         raise RuntimeError("stored desktop session expiry is invalid") from exc
-    if access_expires_at.tzinfo is None:
+    if access_expires_at.tzinfo is None or refresh_expires_at.tzinfo is None:
         raise RuntimeError("stored desktop session expiry must include a timezone")
     return DesktopSession(
         access_token=access_token,
         refresh_token=refresh_token,
         access_expires_at=access_expires_at,
+        refresh_expires_at=refresh_expires_at,
     )
