@@ -1,8 +1,12 @@
+import json
 from typing import Any, Dict, Optional
 
+import pytest
+
 from aw_client import ActivityWatchClient
-from aw_client.config import load_local_server_api_key
 from aw_client import client as client_module
+from aw_client.config import load_server_api_key
+from aw_client.desktop_session import DesktopSessionStore, SERVICE_NAME
 
 
 class DummyResponse:
@@ -16,41 +20,58 @@ class DummyResponse:
         return self._data
 
 
-def write_server_config(tmp_path, filename: str, content: str) -> None:
-    config_dir = tmp_path / "activitywatch" / "aw-server-rust"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / filename).write_text(content)
-
-
-def test_load_local_server_api_key_matches_port(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    write_server_config(
-        tmp_path,
-        "config.toml",
-        'port = 5601\n\n[auth]\napi_key = "secret123"\n',
+def test_desktop_session_store_is_the_single_credential_contract(monkeypatch):
+    stored = {}
+    monkeypatch.setattr(
+        "aw_client.desktop_session.keyring.set_password",
+        lambda service, target, value: stored.update(
+            service=service, target=target, value=value
+        ),
     )
-    write_server_config(
-        tmp_path,
-        "config-testing.toml",
-        'port = 5666\n\n[auth]\napi_key = "testing-secret"\n',
+    monkeypatch.setattr(
+        "aw_client.desktop_session.keyring.get_password",
+        lambda service, target: stored["value"],
     )
 
-    assert load_local_server_api_key("127.0.0.1", 5601) == "secret123"
-    assert load_local_server_api_key("localhost", "5666") == "testing-secret"
-    assert load_local_server_api_key("::1", 5601) == "secret123"
-    assert load_local_server_api_key("127.0.0.1", 5600) is None
-    assert load_local_server_api_key("example.com", 5601) is None
+    store = DesktopSessionStore("AW.EXAMPLE.COM", "443")
+    session = store.save(
+        {
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+            "access_expires_at": "2026-07-11T12:00:00+00:00",
+        }
+    )
+
+    assert store.target == "aw.example.com:443"
+    assert stored["service"] == SERVICE_NAME
+    assert stored["target"] == store.target
+    assert json.loads(stored["value"]) == {
+        "access_token": "access-token",
+        "refresh_token": "refresh-token",
+        "access_expires_at": "2026-07-11T12:00:00+00:00",
+    }
+    assert store.load() == session
 
 
-def test_client_sends_authorization_header_for_local_server(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    write_server_config(
-        tmp_path,
-        "config.toml",
-        'port = 5600\n\n[auth]\napi_key = "secret123"\n',
+def test_desktop_session_store_rejects_incomplete_credentials(monkeypatch):
+    monkeypatch.setattr(
+        "aw_client.desktop_session.keyring.get_password",
+        lambda _service, _target: '{"access_token":"only-access"}',
+    )
+
+    with pytest.raises(RuntimeError, match="incomplete"):
+        DesktopSessionStore("aw.example.com", 443).load()
+
+
+def test_client_sends_desktop_authorization_header(monkeypatch):
+    monkeypatch.setattr(
+        "aw_client.desktop_session.keyring.get_password",
+        lambda _service, _target: (
+            '{"access_token":"secret123","refresh_token":"refresh123",'
+            '"access_expires_at":"2026-07-11T12:00:00+00:00"}'
+        ),
     )
     monkeypatch.setattr(client_module, "SingleInstance", lambda name: object())
-
     captured = {}
 
     def fake_get(url, params=None, headers=None):
@@ -60,29 +81,18 @@ def test_client_sends_authorization_header_for_local_server(tmp_path, monkeypatc
 
     monkeypatch.setattr(client_module.req, "get", fake_get)
 
-    client = ActivityWatchClient("test-client", host="127.0.0.1", port=5600)
+    client = ActivityWatchClient(
+        "test-client", host="aw.example.com", port=443, protocol="https"
+    )
     assert client.get_info()["hostname"] == "test-host"
-    assert captured["url"] == "http://127.0.0.1:5600/api/0/info"
+    assert captured["url"] == "https://aw.example.com:443/api/0/info"
     assert captured["headers"]["Authorization"] == "Bearer secret123"
 
 
-def test_client_skips_authorization_header_for_remote_server(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    write_server_config(
-        tmp_path,
-        "config.toml",
-        'port = 5600\n\n[auth]\napi_key = "secret123"\n',
+def test_missing_desktop_session_has_no_parallel_auth_path(monkeypatch):
+    monkeypatch.setattr(
+        "aw_client.desktop_session.keyring.get_password",
+        lambda _service, _target: None,
     )
-    monkeypatch.setattr(client_module, "SingleInstance", lambda name: object())
 
-    captured = {}
-
-    def fake_get(url, params=None, headers=None):
-        captured["headers"] = headers
-        return DummyResponse({"hostname": "remote-host", "testing": False})
-
-    monkeypatch.setattr(client_module.req, "get", fake_get)
-
-    client = ActivityWatchClient("test-client", host="aw.example.com", port=5600)
-    assert client.get_info()["hostname"] == "remote-host"
-    assert "Authorization" not in captured["headers"]
+    assert load_server_api_key("aw.example.com", 443) is None

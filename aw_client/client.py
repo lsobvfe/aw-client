@@ -23,7 +23,7 @@ from aw_core.dirs import get_data_dir
 from aw_core.models import Event
 from aw_transform.heartbeats import heartbeat_merge
 
-from .config import load_config, load_local_server_api_key
+from .config import load_config, load_server_api_key
 from .singleinstance import SingleInstance
 
 # FIXME: This line is probably badly placed
@@ -88,7 +88,7 @@ class ActivityWatchClient:
 
         server_host = host or server_config["hostname"]
         server_port = port or server_config["port"]
-        self.server_api_key = load_local_server_api_key(str(server_host), server_port)
+        self.server_api_key = load_server_api_key(str(server_host), server_port)
         self.server_address = f"{protocol}://{server_host}:{server_port}"
 
         self.instance = SingleInstance(
